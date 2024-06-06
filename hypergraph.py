@@ -111,6 +111,24 @@ class HNet:
         return uniqueAdjPairs
         
     def findCheapestFusePair(self):
+        # IF THERE ARE FREE (DISCONNECTED) HVERTS...
+        freeNodes = self.findFreeNodes()
+        if len(freeNodes) > 1: # if multiple free nodes, return a pair of them
+            return {freeNodes[0],freeNodes[1]}
+        elif len(freeNodes) > 0: # if only one free node, pair it with the cheapest non-free node
+            a = freeNodes[0]
+            best_b = -1
+            cheapest = 999999
+            for b,hv in enumerate(self.hVerts):
+                if not hv.active: continue
+                if b==a: continue
+                cost = self.pairWeight(a,b)
+                if cost < cheapest:
+                    cheapest = cost
+                    best_b = b
+            return {a,best_b}
+            
+        # IF THERE ARE NO FREE (DISCONNECTED) HVERTS...  
         adjPairs = self.findAdjPairs()
         best_w = 999999
         best_ab = {}
@@ -221,6 +239,19 @@ class HNet:
         f.close()
         print("Saved to:",os.path.realpath(f.name))
         return True
+        
+    def findFreeNodes(self):
+        adjPairs = self.findAdjPairs()
+        freeNodes = []
+        for i,hv in enumerate(self.hVerts):
+            i_is_free = True
+            if not hv.active: continue
+            for pair in adjPairs:
+                if i in pair:
+                    i_is_free = False
+                    break
+            if i_is_free: freeNodes.append(i)
+        return freeNodes
     
 def getVdict(nParts, inCaps = False): #TEMP (just use charsUpper.find()?)
     charsUpper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'

@@ -66,7 +66,7 @@ def kahyparPartition(g):
     hypergraph = kahypar.Hypergraph(num_nodes, num_nets, eptr, eind, k, e_weights, v_weights)
     
     context = kahypar.Context()
-    context.loadINIconfiguration("/home/mjs99/kahypar/config/km1_kKaHyPar_sea20.ini")
+    context.loadINIconfiguration("/home/mjs99/kahypar/config/km1_kKaHyPar_sea20.ini") #TEMP
     
     context.setK(k)
     context.setEpsilon(epsilon)

@@ -92,9 +92,11 @@ def regroupPair(segs,A,B):
         bitstr = intToBin(i,n_pair_params)
         
         ab = globalToLocalBits(pairParams,segA.localParams,bitstr)
+        if ab == '': ab = '0' # Special case (free nodes)
         A_ab = segA.scalars[int(ab,2)]
         
         bc = globalToLocalBits(pairParams,segB.localParams,bitstr)
+        if bc == '': bc = '0' # Special case (free nodes)
         B_bc = segB.scalars[int(bc,2)]
     
         AB_abc = A_ab*B_bc
