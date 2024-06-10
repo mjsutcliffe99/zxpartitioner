@@ -1,5 +1,7 @@
 import pyzx as zx
 from .partition import get_unique_params
+import cuda
+import cupy
 
 def decomp(g):
     gDecomp = zx.simulate.find_stabilizer_decomp(g)
@@ -86,7 +88,7 @@ def regroupPair(segs,A,B):
     
     noncommonParams = list(set(pairParams).symmetric_difference(getExclusivelyCommonParams(segs,A,B)))
     noncommonParams.sort()
-    newScalars = [0]*(2**len(noncommonParams))
+    newScalars = [(0+0j)]*(2**len(noncommonParams))
     
     for i in range(2**n_pair_params):
         bitstr = intToBin(i,n_pair_params)
@@ -103,6 +105,108 @@ def regroupPair(segs,A,B):
         ac = globalToLocalBits(pairParams,noncommonParams,bitstr)
         if ac == '': ac = '0' # If all segments have combined and no params remain
         newScalars[int(ac,2)] += AB_abc
+    
+    segAB = Segment()
+    segAB.localParams = noncommonParams
+    segAB.scalars = newScalars
+
+    segs[A] = segAB
+    segs[B] = Segment()
+    
+    return True
+    
+def regroupPairGPU(segs,A,B):
+    segA = segs[A]
+    segB = segs[B]
+    
+    pairParams = list(set(segA.localParams).union(set(segB.localParams))) # all params common to A and B
+    pairParams.sort()
+    n_pair_params = len(pairParams)
+    size = 2**n_pair_params
+    
+    noncommonParams = list(set(pairParams).symmetric_difference(getExclusivelyCommonParams(segs,A,B)))
+    noncommonParams.sort()
+    n_ex_params = len(noncommonParams) # exclusive param pairs (i.e. those of the future grouped AB segment)
+    
+    #--
+    
+    #                  e.g.     a b c
+    A_params     = 0   #  6  =  1 1 0
+    B_params     = 0   #  3  =  0 1 1
+    AB_ex_params = 0   #  5  =  1 0 1   (be careful to not collapse (n>2)-edged hyderedges
+    
+    for i,p in enumerate(pairParams):
+        if p in segA.localParams: A_params += 2**(n_pair_params-i-1)
+        if p in segB.localParams: B_params += 2**(n_pair_params-i-1)
+        if p in noncommonParams:  AB_ex_params += 2**(n_pair_params-i-1)
+    
+    A_re  = cupy.zeros(2**len(segA.localParams), dtype=cupy.float32)
+    A_im  = cupy.zeros(2**len(segA.localParams), dtype=cupy.float32)
+    B_re  = cupy.zeros(2**len(segB.localParams), dtype=cupy.float32)
+    B_im  = cupy.zeros(2**len(segB.localParams), dtype=cupy.float32)
+    AB_re = cupy.zeros(2**n_ex_params, dtype=cupy.float32)
+    AB_im = cupy.zeros(2**n_ex_params, dtype=cupy.float32)
+    
+    # separate the complex scalars into real and imag components...
+    for i,s in enumerate(segA.scalars):
+        A_re[i] = s.real
+        A_im[i] = s.imag
+    for i,s in enumerate(segB.scalars):
+        B_re[i] = s.real
+        B_im[i] = s.imag
+    
+    # CUDA code for regrouping pair...
+    cuda_code = r'''
+    extern "C"
+    __global__ void regroup_pair_gpu(int paramsA, int paramsB, int paramsC, float * A_re, float * A_im, float * B_re, float * B_im, float * AB_re, float * AB_im, const int N_params, const int size)
+    {
+        int index = threadIdx.x;
+        
+        // LOCALLY INDEX...
+        
+        int ab = 0;
+        int bc = 0;
+        int ac = 0;
+        int abc = index;
+        int x = 0; // current length of ab
+        int y = 0; // current length of bc
+        int z = 0; // current length of ac
+        
+        for (int i=0; i<N_params; ++i)
+        {
+            if (paramsA & 1) ab = ((abc & 1) << x++) | ab;
+            if (paramsB & 1) bc = ((abc & 1) << y++) | bc;
+            if (paramsC & 1) ac = ((abc & 1) << z++) | ac;
+            abc >>= 1;
+            paramsA >>= 1;
+            paramsB >>= 1;
+            paramsC >>= 1;
+        }
+        
+        // MULTIPLY SCALARS (A_ab * B_bc -> AB_abc) ...
+        // (A+ai)(B+bi) = (AB-ab) + (Ab+aB)i
+        
+        float A = A_re[ab];
+        float a = A_im[ab];
+        float B = B_re[bc];
+        float b = B_im[bc];
+
+        atomicAdd(&AB_re[ac], (A*B) - (a*b));  //AB_re[index] = (A*B) - (a*b);
+        atomicAdd(&AB_im[ac], (A*b) + (a*B));  //AB_im[index] = (A*b) + (a*B);
+        __syncthreads();
+    }
+    '''
+    regroup_pair_gpu = cupy.RawKernel(cuda_code, "regroup_pair_gpu")
+    
+    #%%time
+    regroup_pair_gpu((1, 1, 1), (size, 1, 1), (A_params, B_params, AB_ex_params, A_re, A_im, B_re, B_im, AB_re, AB_im, n_pair_params, size))
+    cupy.cuda.stream.get_current_stream().synchronize()
+    
+    # recollect the real and imag components into a scalar...
+    newScalars = AB_re + (AB_im*1j)
+    if type(newScalars) == cupy.ndarray: newScalars = newScalars.tolist()
+    
+    #--
     
     segAB = Segment()
     segAB.localParams = noncommonParams
@@ -147,7 +251,7 @@ def estimateCostCrossref(hNet):
     return calcs_tot#,steps
     
 # CROSS-REFERENCE SEGMENTS...
-def crossrefSegments(segs,hNet):
+def crossrefSegments(segs,hNet,useGPU=False):
     #calcs,steps = estimateCostCrossref() # TEMP
     steps = len(segs)-1
 
@@ -157,7 +261,8 @@ def crossrefSegments(segs,hNet):
         X = fusePair[0]
         Y = fusePair[1]
         #print(X,Y) #TEMP
-        regroupPair(segs,X,Y)
+        if useGPU: regroupPairGPU(segs,X,Y)
+        else: regroupPair(segs,X,Y)
     
     #assert len(segs[0].scalars) == 1
     result = segs[0].scalars[0]
