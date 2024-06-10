@@ -1,7 +1,10 @@
+# MATTHEW SUTCLIFFE, 2024
+
 import pyzx as zx
 from .partition import get_unique_params
 import cuda
 import cupy
+import math
 
 def decomp(g):
     gDecomp = zx.simulate.find_stabilizer_decomp(g)
@@ -160,7 +163,7 @@ def regroupPairGPU(segs,A,B):
     extern "C"
     __global__ void regroup_pair_gpu(int paramsA, int paramsB, int paramsC, float * A_re, float * A_im, float * B_re, float * B_im, float * AB_re, float * AB_im, const int N_params, const int size)
     {
-        int index = threadIdx.x;
+        int index = blockIdx.x * blockDim.x + threadIdx.x;
         
         // LOCALLY INDEX...
         
@@ -198,8 +201,15 @@ def regroupPairGPU(segs,A,B):
     '''
     regroup_pair_gpu = cupy.RawKernel(cuda_code, "regroup_pair_gpu")
     
+    threads_per_block = 1024
+    grid_size  = (1,1,1)
+    block_size = (size,1,1)
+    if size > 1024:
+        grid_size  = (math.ceil(size/threads_per_block),1,1)
+        block_size = (threads_per_block,1,1)
+    
     #%%time
-    regroup_pair_gpu((1, 1, 1), (size, 1, 1), (A_params, B_params, AB_ex_params, A_re, A_im, B_re, B_im, AB_re, AB_im, n_pair_params, size))
+    regroup_pair_gpu(grid_size, block_size, (A_params, B_params, AB_ex_params, A_re, A_im, B_re, B_im, AB_re, AB_im, n_pair_params, size)) #regroup_pair_gpu(grid_size, block_size, (A_params, B_params, AB_ex_params, A_re, A_im, B_re, B_im, AB_re, AB_im, n_pair_params, size))
     cupy.cuda.stream.get_current_stream().synchronize()
     
     # recollect the real and imag components into a scalar...

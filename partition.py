@@ -1,6 +1,9 @@
+# MATTHEW SUTCLIFFE, 2024
+
 import pyzx as zx
 import kahypar as kahypar
 from .hypergraph import *
+from .utils import *
 
 def getK(): return 6 #TEMP
 
@@ -66,7 +69,7 @@ def kahyparPartition(g):
     hypergraph = kahypar.Hypergraph(num_nodes, num_nets, eptr, eind, k, e_weights, v_weights)
     
     context = kahypar.Context()
-    context.loadINIconfiguration("/home/mjs99/kahypar/config/km1_kKaHyPar_sea20.ini") #TEMP
+    context.loadINIconfiguration(GET_MODULE_PATH()+"/km1_kKaHyPar_sea20.ini") #TEMP
     
     context.setK(k)
     context.setEpsilon(epsilon)
