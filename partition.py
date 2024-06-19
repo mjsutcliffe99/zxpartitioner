@@ -4,8 +4,7 @@ import pyzx as zx
 import kahypar as kahypar
 from .hypergraph import *
 from .utils import *
-
-def getK(): return 6 #TEMP
+from .regroup import estimateCostPrecomp, estimateCostCrossref
 
 def weighHyperverts(g):
     edges = []
@@ -60,16 +59,13 @@ def getHyperData(g):
     
     return (num_nodes,num_nets,eptr,eind,e_weights,v_weights)
 
-def kahyparPartition(g):
+def kahyparPartition(g,k,epsilon=0.5):
     num_nodes,num_nets,eptr,eind,e_weights,v_weights = getHyperData(g)
-    
-    k = getK() # 10
-    epsilon = 0.5 #0.5 # 0.25 # 0.8 #0.03
     
     hypergraph = kahypar.Hypergraph(num_nodes, num_nets, eptr, eind, k, e_weights, v_weights)
     
     context = kahypar.Context()
-    context.loadINIconfiguration(GET_MODULE_PATH()+"/km1_kKaHyPar_sea20.ini") #TEMP
+    context.loadINIconfiguration(GET_MODULE_PATH()+"/km1_kKaHyPar_sea20.ini")
     
     context.setK(k)
     context.setEpsilon(epsilon)
@@ -201,15 +197,8 @@ def accountParamScalars(gs):
                 break # go to next p
     return True
     
-def get_unique_params(g): #TODO - move this into graph_s.py
-    unique_params = set()
-    allParams = g.get_all_params()
-    for v in allParams:
-        unique_params = unique_params.union(allParams[v])
-    return unique_params
-    
-def partition(g):
-    k = kahyparPartition(g)
+def kpartition(g,k,epsilon=0.5):
+    kahyparPartition(g,k,epsilon)
     mem = readPartitionData()
     gs,vmems = memToConnectivityGraphs(g,mem)
     for i in range(1,len(gs)): gs[i].scalar = zx.Graph().scalar # ensure the parent scalar is only counted once
@@ -217,4 +206,19 @@ def partition(g):
     hNet = genHNet(cuts,k)
     gs = cutAndClean(g,gs,cuts,vmems)
     accountParamScalars(gs)
+    return hNet,gs
+    
+def partition(g,k=-1,epsilon=0.5):
+    if k<0: # auto-determine k
+        cost_precomp  = -1
+        cost_crossref = -2
+        k = 1
+        while cost_precomp > cost_crossref:
+            k += 1
+            hNet,gs = kpartition(g,k,epsilon)
+            cost_precomp  = estimateCostPrecomp(gs)
+            cost_crossref = estimateCostCrossref(hNet)
+            #print("GIVEN k=",k,"\t| precomp=",cost_precomp,"\t| crossref=",cost_crossref) #TEMP
+    else:   # use specified k
+        hNet,gs = kpartition(g,k,epsilon)
     return hNet,gs

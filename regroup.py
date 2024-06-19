@@ -1,7 +1,7 @@
 # MATTHEW SUTCLIFFE, 2024
 
 import pyzx as zx
-from .partition import get_unique_params
+from .utils import *
 import cuda
 import cupy
 import math
@@ -230,22 +230,23 @@ def regroupPairGPU(segs,A,B):
 #----------------
     
 # Estimate runtime for precomp...
-def estimateCostPrecomp(gs,k):
+def estimateCostPrecomp(gs,doPrint=False):
     calcs_tot = 0
-    for i in range(k):
-        calcs_tot += 2**(len(get_unique_params(gs[i])))
-    print(calcs_tot)
+    for g in gs:
+        calcs_tot += 2**(len(get_unique_params(g)))
+    if doPrint: print(calcs_tot)
     #print(" ~",max([calcs_A,calcs_B,calcs_C,calcs_D]))
     return calcs_tot
 
 # PRECOMPILE SEGMENTS...
-def precompSegments(gs,k):
+def precompSegments(gs):
+    k = len(gs)
     segs = [None]*k
     for i in range(k): segs[i] = Segment(gs[i])
     return segs
 
 # Estimate runtime for cross-ref...
-def estimateCostCrossref(hNet):
+def estimateCostCrossref(hNet,doPrint=False):
     hNetCopy = hNet.copy()
     calcs_tot = 0
     steps = 0
@@ -255,9 +256,10 @@ def estimateCostCrossref(hNet):
         steps += 1
     
     hNetCopy = hNet.copy()
-    max_crossref_calcs = hNetCopy.fullReduce(True,False)
-    print("\n",calcs_tot)
-    print("  ~",2**max_crossref_calcs)
+    max_crossref_calcs = hNetCopy.fullReduce(doPrint,False)
+    if doPrint:
+        print("\n",calcs_tot)
+        print("  ~",2**max_crossref_calcs)
     return calcs_tot#,steps
     
 # CROSS-REFERENCE SEGMENTS...
