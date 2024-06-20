@@ -86,7 +86,7 @@ def readPartitionData():
 def memToConnectivityGraphs(g, mem):
     #for v in g.vertices(): g.set_phase(v,0)
     
-    chars = 'abcdefghijklmnopqrstuvwxyz' #TEMP
+    chars = CHARS_PARAMS
     edges = []
     for e in g.edges(): edges.append(e)
 
@@ -153,7 +153,7 @@ def cut_vertex_param(g,v,ph):
     return g
     
 def cutAndClean(g,gs,cuts,vmems):
-    pChars = 'abcdefghijklmnopqrstuvwxyz'#ABCDEFGHIJKLMNOPQRSTUVWXYZαβγδεϝͷϛζͱηθικλμξϻρσͼφχψωϡͳϸ' #TEMP
+    pChars = CHARS_PARAMS
     
     # Apply the cuts...
     for i,c in enumerate(cuts):
@@ -208,17 +208,23 @@ def kpartition(g,k,epsilon=0.5):
     accountParamScalars(gs)
     return hNet,gs
     
-def partition(g,k=-1,epsilon=0.5):
+def partition(g,k=-1,epsilon=0.5,runtimeFactor=1):
+    outData = []
+    
     if k<0: # auto-determine k
         cost_precomp  = -1
-        cost_crossref = -2
+        cost_crossref = -9999999
         k = 1
-        while cost_precomp > cost_crossref:
+        while cost_precomp*runtimeFactor > cost_crossref: # TEMP (150)
             k += 1
             hNet,gs = kpartition(g,k,epsilon)
-            cost_precomp  = estimateCostPrecomp(gs)
+            cost_precomp  = estimateCostPrecomp(gs,k)
             cost_crossref = estimateCostCrossref(hNet)
-            #print("GIVEN k=",k,"\t| precomp=",cost_precomp,"\t| crossref=",cost_crossref) #TEMP
+            outData.extend([k,cost_precomp,cost_crossref]) #TEMP
+            if k > 25: break #TEMP
     else:   # use specified k
         hNet,gs = kpartition(g,k,epsilon)
+        
+    print("RESULTS...\n\n") #TEMP
+    for i in range(int(len(outData)/3)): print("GIVEN k=",outData[i*3],"\t| precomp=",outData[i*3+1],"\t| crossref=",outData[i*3+2]) #TEMP
     return hNet,gs

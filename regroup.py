@@ -233,7 +233,7 @@ def regroupPairGPU(segs,A,B):
 def estimateCostPrecomp(gs,doPrint=False):
     calcs_tot = 0
     for g in gs:
-        calcs_tot += 2**(len(get_unique_params(g)))
+        calcs_tot += 2**(len(get_unique_params(g)) + (EST_ALPHA*zx.tcount(g)))
     if doPrint: print(calcs_tot)
     #print(" ~",max([calcs_A,calcs_B,calcs_C,calcs_D]))
     return calcs_tot

@@ -8,6 +8,7 @@ import random
 import ipywidgets as widgets
 from ipywidgets import interact, interactive, fixed, interact_manual
 from PIL import Image
+from .utils import *
 
 DIR_MODULE = os.path.dirname(__file__) + '/'
 #DIR_WORKING = os.path.abspath('') + '/'
@@ -116,7 +117,7 @@ class HNet:
         # IF THERE ARE FREE (DISCONNECTED) HVERTS...
         freeNodes = self.findFreeNodes()
         if len(freeNodes) > 1: # if multiple free nodes, return a pair of them
-            return {freeNodes[0],freeNodes[1]}
+            return sorted({freeNodes[0],freeNodes[1]})
         elif len(freeNodes) > 0: # if only one free node, pair it with the cheapest non-free node
             a = freeNodes[0]
             best_b = -1
@@ -128,7 +129,7 @@ class HNet:
                 if cost < cheapest:
                     cheapest = cost
                     best_b = b
-            return {a,best_b}
+            return sorted({a,best_b})
             
         # IF THERE ARE NO FREE (DISCONNECTED) HVERTS...  
         adjPairs = self.findAdjPairs()
@@ -142,7 +143,7 @@ class HNet:
             if w < best_w:
                 best_w = w
                 best_ab = {a,b}
-        return best_ab#,best_w
+        return sorted(best_ab)#,best_w
 
     def getActiveVerts(self):
         activeVerts = []
@@ -151,7 +152,7 @@ class HNet:
         return activeVerts
 
     def stepReduce(self,output=True,draw=False):
-        cheapestPair = list(self.findCheapestFusePair())
+        cheapestPair = self.findCheapestFusePair()
         w = self.pairWeight(cheapestPair[0],cheapestPair[1],doPrint=False)
         if output: print("Fuse",self.hVerts[cheapestPair[0]].label,"and",self.hVerts[cheapestPair[1]].label,"\t=> cost:",w)
         self.fusePair(cheapestPair[0],cheapestPair[1])
@@ -162,7 +163,7 @@ class HNet:
         topCost = 0
         while len(self.getActiveVerts()) > 1:
             highlightedPair = None
-            if doHighlight: highlightedPair = list(self.findCheapestFusePair())
+            if doHighlight: highlightedPair = self.findCheapestFusePair()
             if drawSteps: self.draw(highlightedVerts=highlightedPair)
             cp,w = self.stepReduce(output,draw=False)
             if w > topCost: topCost = w
@@ -181,7 +182,7 @@ class HNet:
                 outFigs.append(ig.plot(g, **vs,target='outfig'+str(n)+'.png'))
                 outNextMoves.append(strNextMove)
                 break
-            cheapestPair = list(self.findCheapestFusePair())
+            cheapestPair = self.findCheapestFusePair()
             highlightPair = None
             if doHighlight: highlightPair = cheapestPair
             g,vs = drawHypergraph(self,highlightPair)
@@ -256,8 +257,8 @@ class HNet:
         return freeNodes
     
 def getVdict(nParts, inCaps = False): #TEMP (just use charsUpper.find()?)
-    charsUpper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    charsLower = 'abcdefghijklmnopqrstuvwxyz'
+    charsUpper = CHARS_SEGMENTS
+    charsLower = CHARS_PARAMS
     vDictUpper = dict()
     vDictLower = dict()
     
