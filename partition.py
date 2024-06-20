@@ -208,23 +208,24 @@ def kpartition(g,k,epsilon=0.5):
     accountParamScalars(gs)
     return hNet,gs
     
-def partition(g,k=-1,epsilon=0.5,runtimeFactor=1):
-    outData = []
+def partition(g,k=-1,epsilon=0.5,runtimeFactor=1,debug=False):
+    outData = [] # debug data
     
     if k<0: # auto-determine k
         cost_precomp  = -1
         cost_crossref = -9999999
         k = 1
-        while cost_precomp*runtimeFactor > cost_crossref: # TEMP (150)
+        while cost_precomp*runtimeFactor > cost_crossref:
             k += 1
             hNet,gs = kpartition(g,k,epsilon)
             cost_precomp  = estimateCostPrecomp(gs,k)
             cost_crossref = estimateCostCrossref(hNet)
-            outData.extend([k,cost_precomp,cost_crossref]) #TEMP
-            if k > 25: break #TEMP
+            if debug: outData.extend([k,cost_precomp,cost_crossref])
+            if k > 25: break #TEMP - Currently caps at 25 segments (should really be capping when T-counts are low enough instead)
     else:   # use specified k
         hNet,gs = kpartition(g,k,epsilon)
         
-    print("RESULTS...\n\n") #TEMP
-    for i in range(int(len(outData)/3)): print("GIVEN k=",outData[i*3],"\t| precomp=",outData[i*3+1],"\t| crossref=",outData[i*3+2]) #TEMP
+    if debug:
+        print("Estimated no. of calculations...\n")
+        for i in range(int(len(outData)/3)): print("GIVEN k=",outData[i*3],"\t| precomp=",outData[i*3+1],"\t| crossref=",outData[i*3+2])
     return hNet,gs

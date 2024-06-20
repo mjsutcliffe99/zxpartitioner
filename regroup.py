@@ -1,17 +1,36 @@
 # MATTHEW SUTCLIFFE, 2024
 
 import pyzx as zx
+import quizx as qzx
 from .utils import *
 import cuda
 import cupy
 import math
 
-def decomp(g):
-    gDecomp = zx.simulate.find_stabilizer_decomp(g)
-    #print("No. of terms:",len(gDecomp))
-    total = (0+0j)
-    for i in gDecomp: total += i.scalar.to_number()
-    return total
+def decomp(g,use_quizx=False,use_cats=False): # Note: use_cats only applies if use_quizx=True
+    if not use_quizx:
+        gDecomp = zx.simulate.find_stabilizer_decomp(g)
+        #print("(pyzx) No. of terms:",len(gDecomp))
+        total = (0+0j)
+        for i in gDecomp: total += i.scalar.to_number()
+        return total
+    else:
+        d = qzx.decompose.Decomposer(pyzxToQuizx(g))
+        d.use_cats(use_cats)
+        d.apply_optimizations(True)
+        d.decomp_all()
+        #print("(quizx) No. of terms:",d.get_nterms())
+        return d.scalar.to_number()
+
+def pyzxToQuizx(p_g):
+    p_g = p_g.copy() # Renumber vertex labels
+    r_g = zx.Graph(backend='quizx-vec')
+    for v in p_g.vertices(): r_g.add_vertex(ty=p_g.type(v), qubit=int(p_g.qubit(v)), row=int(p_g.row(v)), phase=p_g.phase(v))
+    for e in p_g.edges(): r_g.add_edge(e,p_g.edge_type(e))
+    return r_g
+
+def effective_alpha(nterms,tcount):
+    return math.log2(nterms)/tcount
 
 def prepParams(g):
     pVerts = [] # parameterised vertices
@@ -32,7 +51,7 @@ def prepParams(g):
 def intToBin(x,n_params): return format(x, '#0'+str(n_params+2)+'b')[2:] # TODO - improve this!
 
 # TODO - this is very messy and inefficient right now...
-def iterateCuts(g):
+def iterateCuts(g,use_quizx=False,use_cats=False):
     g = g.copy()
     g,pVerts,pVertsParams,localParams = prepParams(g)
     gOrig = g.copy()
@@ -50,7 +69,7 @@ def iterateCuts(g):
             B = int(strBin[pp_B_index]) # B = 0 or 1
             if B == 1: g.scalar.add_phase(pp.alpha/4) # TODO - should really also remove the param phasepair data here (but it shouldn't matter)
         zx.simplify.full_reduce(g)
-        scalars[i] = decomp(g)
+        scalars[i] = decomp(g,use_quizx,use_cats)
     return localParams,scalars
 
 def globalToLocalBits(globalParams,localParams,globBitstr):
@@ -63,9 +82,9 @@ class Segment: # TODO - should be in HVert
     localParams = []
     scalars = []
     
-    def __init__(self,g=None):
+    def __init__(self,g=None,use_quizx=False,use_cats=False):
         if not g == None:
-            localParams,scalars = iterateCuts(g)
+            localParams,scalars = iterateCuts(g,use_quizx,use_cats)
             self.localParams = localParams
             self.scalars = scalars
             return
@@ -239,10 +258,10 @@ def estimateCostPrecomp(gs,doPrint=False):
     return calcs_tot
 
 # PRECOMPILE SEGMENTS...
-def precompSegments(gs):
+def precompSegments(gs,use_quizx=False,use_cats=False):
     k = len(gs)
     segs = [None]*k
-    for i in range(k): segs[i] = Segment(gs[i])
+    for i in range(k): segs[i] = Segment(gs[i],use_quizx,use_cats)
     return segs
 
 # Estimate runtime for cross-ref...
