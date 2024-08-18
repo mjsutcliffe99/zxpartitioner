@@ -218,7 +218,7 @@ def partition(g,k=-1,epsilon=0.5,runtimeFactor=1,debug=False):
         while cost_precomp*runtimeFactor > cost_crossref:
             k += 1
             hNet,gs = kpartition(g,k,epsilon)
-            cost_precomp  = estimateCostPrecomp(gs,k)
+            cost_precomp  = estimateCostPrecomp(gs)
             cost_crossref = estimateCostCrossref(hNet)
             if debug: outData.extend([k,cost_precomp,cost_crossref])
             if k > 25: break #TEMP - Currently caps at 25 segments (should really be capping when T-counts are low enough instead)
